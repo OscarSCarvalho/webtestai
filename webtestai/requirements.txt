@@ -1,0 +1,9 @@
+playwright>=1.44.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+requests>=2.31.0
+robotframework>=7.0.0
+robotframework-browser>=18.0.0
+robotframework-seleniumlibrary>=6.3.0
+python-dotenv>=1.0.0
+rich>=13.7.0

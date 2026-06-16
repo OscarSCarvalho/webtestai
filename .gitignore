@@ -1,0 +1,20 @@
+# Ambiente virtual
+.venv/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Relatórios gerados
+webtestai/reports/
+
+# Configuração local com segredos
+webtestai/config/.env
+
+# IDE
+.vscode/
+*.code-workspace
+
+# Robot Framework logs temporários
+playwright-log.txt
