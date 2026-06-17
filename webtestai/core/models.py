@@ -53,6 +53,8 @@ class WebElement:
     in_nav:        bool = False
     in_header:     bool = False
     in_footer:     bool = False
+    input_type:    Optional[str] = None   # "text","email","password","checkbox","radio","select","date","file","textarea"
+    options:       Optional[List[str]] = None  # opções disponíveis para <select>
 
     def to_dict(self) -> dict:
         return asdict(self)

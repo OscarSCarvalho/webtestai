@@ -36,12 +36,13 @@ _JS_EXTRACT = """
         if (testId) return '[data-testid="' + testId + '"]';
         const ariaLabel = el.getAttribute('aria-label');
         if (ariaLabel && ariaLabel.length < 60) return '[aria-label="' + ariaLabel + '"]';
+        // name vem antes de classes: input[name="email"] é muito mais específico que input.form-control
+        const name = el.getAttribute('name');
+        if (name) return el.tagName.toLowerCase() + '[name="' + name + '"]';
         const classes = Array.from(el.classList).filter(c =>
             !c.match(/^(js-|ng-|v-|_[a-z0-9]{6}|ember|svelte-|css-|sc-)/)
         ).slice(0, 2);
         if (classes.length) return el.tagName.toLowerCase() + '.' + classes.join('.');
-        const name = el.getAttribute('name');
-        if (name) return el.tagName.toLowerCase() + '[name="' + name + '"]';
         return el.tagName.toLowerCase();
     }
 
@@ -192,6 +193,15 @@ _JS_EXTRACT = """
             in_menu:       context.inMenu,
             in_form:       context.inForm,
             priority:      getPriority(elementType, context),
+            // tipo real do campo — essencial para IA escolher a keyword correta
+            input_type:    (tag === 'input' ? (el.getAttribute('type') || 'text').toLowerCase()
+                           : tag === 'select'   ? 'select'
+                           : tag === 'textarea' ? 'textarea'
+                           : null),
+            // opções do <select> nativo para IA gerar Select Options By com valores reais
+            options:       (tag === 'select'
+                           ? Array.from(el.options).slice(0, 10).map(o => o.text.trim()).filter(t => t && t.length > 0)
+                           : null),
         });
     });
 
@@ -307,6 +317,8 @@ def scrape(url: str, browser_name: Optional[str] = None, headless: Optional[bool
             in_nav        = raw.get("in_nav", False),
             in_header     = raw.get("in_header", False),
             in_footer     = raw.get("in_footer", False),
+            input_type    = raw.get("input_type"),
+            options       = raw.get("options") or None,
         )
         elements.append(el)
 

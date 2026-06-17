@@ -66,17 +66,26 @@ porque funcionam independente da tag HTML usada pelo framework.
 3. ID:
    id=login-button
 
-4. DATA-TESTID:
+4. NAME ATTRIBUTE (excelente para inputs/selects dentro de formulários — muito específico):
+   css=input[name="email"]
+   css=input[name="password"]
+   css=select[name="estado"]
+   css=textarea[name="mensagem"]
+   css=input[name="cpf"]
+
+5. DATA-TESTID:
    [data-testid="login-btn"]
 
-5. ARIA-LABEL:
+6. ARIA-LABEL:
    [aria-label="Fechar menu"]
 
-6. CSS:
+7. CSS (com :visible para evitar strict mode quando há versões hidden/mobile do mesmo el):
    css=nav .nav-link
    css=.btn-primary
+   css=input[name="email"]:visible      ← :visible filtra apenas o elemento visível
+   css=button.submit:visible >> nth=0   ← :visible + nth=0 para duplicatas
 
-7. XPATH (último recurso):
+8. XPATH (último recurso):
    xpath=//nav//a[normalize-space()='Home']
 
 ══════════════════════════════════════════════════════════════════
@@ -99,6 +108,89 @@ REGRA GERAL:
 - Para textos que aparecem mais de uma vez: SEMPRE use `role=link[name="texto"]` (exact match)
 - O seletor `text=X` faz match PARCIAL — "Books to Scrape" também é matched por `text=Books`
 - O seletor `role=link[name="X"]` faz match EXATO — "Books to Scrape" NÃO é matched por `role=link[name="Books"]`
+
+PROBLEMA COMUM — versões hidden/mobile do mesmo elemento:
+Muitos sites têm navbar desktop (hidden no mobile) e navbar mobile (hidden no desktop).
+Ambas ficam no DOM mas apenas uma é visível. Isso causa strict mode violation.
+SOLUÇÃO: use :visible para filtrar apenas o elemento visível:
+    Click    css=.nav-link:visible >> nth=0
+    Fill Text    css=input[name="search"]:visible    ${BUSCA}
+    Click    css=button[type="submit"]:visible
+
+══════════════════════════════════════════════════════════════════
+TIPOS DE CAMPO — KEYWORD CORRETA POR TIPO (CRÍTICO — errar causa falha imediata)
+══════════════════════════════════════════════════════════════════
+O campo "input_type" em cada elemento indica o tipo real. Escolha a keyword conforme:
+
+input_type = "text" / "email" / "password" / "number" / "search" / "tel" / "url":
+    Wait For Elements State    ${CAMPO}    visible    timeout=10s
+    Clear Text    ${CAMPO}
+    Fill Text    ${CAMPO}    ${VALOR}
+
+input_type = "textarea":
+    Wait For Elements State    ${CAMPO}    visible    timeout=10s
+    Clear Text    ${CAMPO}
+    Fill Text    ${CAMPO}    ${VALOR}
+
+input_type = "checkbox":
+    Wait For Elements State    ${CHECKBOX}    visible    timeout=10s
+    Check Checkbox    ${CHECKBOX}
+    # Para desmarcar: Uncheck Checkbox    ${CHECKBOX}
+    # NUNCA use Fill Text em checkbox — causa erro
+
+input_type = "radio":
+    Wait For Elements State    ${RADIO}    visible    timeout=10s
+    Click    ${RADIO}
+    # NUNCA use Fill Text em radio — causa erro
+
+input_type = "select" (ou element_type = "select" / tag = "select"):
+    Wait For Elements State    ${SELECT}    visible    timeout=10s
+    Select Options By    ${SELECT}    label    ${OPCAO_TEXTO}
+    # OU por valor interno:  Select Options By    ${SELECT}    value    ${VALOR}
+    # Use as opções listadas em "options" no JSON do elemento se disponíveis
+    # NUNCA use Fill Text em select — causa erro imediato
+
+input_type = "date":
+    Wait For Elements State    ${DATA}    visible    timeout=10s
+    Fill Text    ${DATA}    2024-01-15    # formato YYYY-MM-DD
+    # Se o campo usar máscara: Type Text    ${DATA}    01152024  (sem separadores)
+
+input_type = "file":
+    Upload File By Selector    ${FILE_INPUT}    ${CAMINHO_ARQUIVO}
+
+contenteditable (editor rich text — Quill, TinyMCE, Draft.js):
+    Click    ${EDITOR}
+    Keyboard Input    type    ${TEXTO}
+
+══════════════════════════════════════════════════════════════════
+PADRÃO COMPLETO PARA FORMULÁRIOS — SEQUÊNCIA OBRIGATÓRIA
+══════════════════════════════════════════════════════════════════
+Sempre que preencher um formulário, siga esta sequência:
+
+1. Aguarde o formulário antes de qualquer interação:
+   Wait For Elements State    css=form    visible    timeout=15s
+
+2. Para cada campo, espere e limpe antes de preencher:
+   Wait For Elements State    ${CAMPO}    visible    timeout=10s
+   Clear Text    ${CAMPO}
+   Fill Text    ${CAMPO}    ${VALOR}
+
+3. Campos com máscara (CPF, CNPJ, telefone) — pressione Tab após preencher:
+   Fill Text    ${CPF}    137.208.120-81
+   Keyboard Key    press    Tab
+
+4. Selects nativos:
+   Wait For Elements State    ${SELECT}    visible    timeout=10s
+   Select Options By    ${SELECT}    label    ${OPCAO}
+
+5. Role até o botão submit antes de clicar:
+   Scroll To Element    ${BTN_SUBMIT}
+   Wait For Elements State    ${BTN_SUBMIT}    visible    timeout=10s
+   Click    ${BTN_SUBMIT}
+
+6. Aguarde feedback após submit:
+   Wait For Load State    load    timeout=30s
+   # OU em SPAs: Wait For Elements State    css=.success, .alert, [class*="success"]    visible    timeout=15s
 
 ══════════════════════════════════════════════════════════════════
 FUNDAMENTAL: ELEMENTOS CLICÁVEIS ALÉM DE <a> E <button>
@@ -193,9 +285,73 @@ Scroll To Element    ${LOCATOR}
 Switch Page    NEW / Switch Page    FIRST
 
 ══════════════════════════════════════════════════════════════════
-KEYWORDS PROIBIDAS (SeleniumLibrary — NUNCA USE)
+MASSA DE DADOS — PREENCHIMENTO AUTOMÁTICO DE FORMULÁRIOS
 ══════════════════════════════════════════════════════════════════
-Click Element, Input Text, Hover Element, Wait For Page To Load,
+Sempre que encontrar um formulário, utilize automaticamente os dados abaixo.
+Declare cada valor como variável na seção *** Variables ***.
+
+DADOS DE TESTE:
+  Login                : oscar.carvalho
+  Senha                : Teste@1234
+  Empresa              : Athos Tecnologia
+  CNPJ                 : 62.055.397/0001-76
+  Nome                 : Oscar
+  Sobrenome            : Carvallho
+  CPF                  : 137.208.120-81
+  Endereço             : Rua Amaixeiras, número 621
+  E-mail               : athostecnologia.com.br
+  E-mail Corporativo   : athostecnologia.com.br
+  Celular              : 11941313160
+  Sexo                 : Masculino
+  Valor                : 100,00
+  Estado               : SP
+  Cidade               : Cotia
+
+MAPEAMENTO DE CAMPOS (PT e EN):
+  empresa / company / organization / organização        → ${EMPRESA}
+  cnpj / company document / corporate id               → ${CNPJ}
+  nome / first name / given name                       → ${NOME}
+  sobrenome / last name / family name                  → ${SOBRENOME}
+  cpf / document / personal document                   → ${CPF}
+  endereço / address / rua / street                    → ${ENDERECO}
+  email / e-mail / correio eletrônico                  → ${EMAIL}
+  corporate email / work email / business email        → ${EMAIL_CORPORATIVO}
+  celular / telefone / phone / mobile                  → ${CELULAR}
+  sexo / gender                                        → ${SEXO}
+  valor / amount / price / total                       → ${VALOR}
+  estado / state / uf                                  → ${ESTADO}
+  cidade / city                                        → ${CIDADE}
+  login / username / usuário                           → ${LOGIN}
+  senha / password / senhas                            → ${SENHA}
+
+REGRAS OBRIGATÓRIAS:
+  1. Declare TODAS as variáveis de massa de dados na seção *** Variables ***
+  2. Use os dados somente quando o campo estiver vazio (não sobrescreva valores pré-preenchidos)
+  3. Respeite máscaras e validações: CPF com pontos e traço, CNPJ com pontos/barra/traço
+  4. Se o formulário exigir um campo não listado acima, gere um dado fictício válido e coerente
+  5. NUNCA interrompa o teste por falta de dados — sempre tente concluir o fluxo completo
+  6. No Test Case de formulário válido, preencha TODOS os campos obrigatórios visíveis
+
+EXEMPLO DE DECLARAÇÃO NAS VARIABLES:
+  ${EMPRESA}           Athos Tecnologia
+  ${CNPJ}              62.055.397/0001-76
+  ${NOME}              Oscar
+  ${SOBRENOME}         Carvallho
+  ${CPF}               137.208.120-81
+  ${ENDERECO}          Rua Amaixeiras, número 621
+  ${EMAIL}             athostecnologia.com.br
+  ${EMAIL_CORPORATIVO}    athostecnologia.com.br
+  ${CELULAR}           11941313160
+  ${SEXO}              Masculino
+  ${VALOR}             100,00
+  ${ESTADO}            SP
+  ${CIDADE}            Cotia
+  ${LOGIN}             oscar.carvalho
+  ${SENHA}             Teste@1234
+
+══════════════════════════════════════════════════════════════════
+KEYWORDS PROIBIDAS (SeleniumLibrary — NUNCA USE)
+═════════════════════════════════════════
 Page Should Contain, Element Should Be Visible, Wait Until Element Is Visible,
 Go To, Open Browser, Close All Browsers, Switch Window, Get Location
 
@@ -325,9 +481,25 @@ def _build_prompt(result: PageScrapeResult) -> str:
     forms_note = ""
     if form_inputs:
         field_hints = [e.placeholder or e.aria_label or e.name or "" for e in form_inputs[:6] if any([e.placeholder, e.aria_label, e.name])]
+        # Resumo de tipos para a IA saber quais keywords usar
+        type_counts_form: dict[str, int] = {}
+        select_options_summary: list[str] = []
+        for e in form_inputs:
+            t = e.input_type or e.element_type or "text"
+            type_counts_form[t] = type_counts_form.get(t, 0) + 1
+            if e.options:
+                label = e.name or e.aria_label or e.placeholder or "select"
+                select_options_summary.append(f"{label}: {e.options[:5]}")
+        type_breakdown = ", ".join(f"{v}x {k}" for k, v in type_counts_form.items())
+        select_hint = (" Selects detectados com opções: " + "; ".join(select_options_summary[:3]) + ".") if select_options_summary else ""
         forms_note = (
-            f"\nATENÇÃO — {len(form_inputs)} campos de formulário detectados: {field_hints}. "
-            "Crie Test Cases para preenchimento válido e inválido.\n"
+            f"\nATENÇÃO — {len(form_inputs)} campos de formulário detectados ({type_breakdown}): {field_hints}.{select_hint} "
+            "Crie Test Cases para preenchimento válido e inválido. "
+            "USE a keyword correta por tipo: text/email/password→Fill Text, select→Select Options By, "
+            "checkbox→Check Checkbox, radio→Click. "
+            "USE OBRIGATORIAMENTE a massa de dados definida no system prompt "
+            "(${NOME}, ${EMAIL}, ${CPF}, ${CNPJ}, ${EMPRESA}, ${CELULAR}, ${ENDERECO}, "
+            "${ESTADO}, ${CIDADE}, ${SOBRENOME}, ${SEXO}, ${VALOR}, ${EMAIL_CORPORATIVO}).\n"
         )
 
     new_tab_note = ""
