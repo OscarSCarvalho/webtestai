@@ -34,4 +34,4 @@ REPORTS_DIR.mkdir(exist_ok=True)
 
 # ── AI Model ─────────────────────────────────────────
 AI_MODEL      = "gemini-2.5-flash"
-AI_MAX_TOKENS = 8192
+AI_MAX_TOKENS = 32768

@@ -1,19 +1,19 @@
 # WebTestAI
 
-Ferramenta de automação inteligente de testes web. Dado uma URL, o WebTestAI abre a página no browser, extrai os elementos interativos, envia para o Google Gemini gerar cenários de teste e executa tudo automaticamente com Robot Framework.
+Ferramenta de automação inteligente de testes web. Dado uma URL, o WebTestAI abre a página no browser, mapeia **todos** os elementos interativos, envia para o Google Gemini gerar cenários de teste e executa tudo automaticamente com Robot Framework.
 
 ---
 
 ## Como funciona
 
 ```
-URL → [Scraper] → [IA Gemini] → [Robot Framework] → Relatório HTML
+URL → [Scraper JS] → [IA Gemini] → [Robot Framework] → Relatório HTML
 ```
 
 | Etapa | O que faz |
 |-------|-----------|
-| 1. Scraper | Abre o browser com Playwright, renderiza a página e extrai inputs, botões, links, selects, formulários e headings com seus seletores CSS e XPath |
-| 2. IA | Envia os elementos para o Google Gemini 2.5 Flash que gera um arquivo `.robot` completo com 3+ cenários de teste |
+| 1. Scraper | Abre o browser com Playwright e executa JavaScript para mapear todos os elementos interativos — incluindo `<div>`, `<span>`, `<li>` com `onclick`, `role="button"`, `cursor:pointer` e componentes de frameworks modernos (React, Vue, Angular) |
+| 2. IA | Envia os elementos organizados por seção (navbar, formulários, botões, links) para o Google Gemini 2.5 Flash, que gera um arquivo `.robot` completo com 5+ cenários de teste |
 | 3. Executor | Roda o `.robot` com Robot Framework e Browser Library |
 | 4. Relatório | Salva `report.html`, `log.html`, `elements.json` e abre o relatório no browser |
 
@@ -75,13 +75,11 @@ MAX_ELEMENTS_PER_TYPE=40
 
 ### Modo interativo (recomendado)
 
-Execute e responda às perguntas no terminal:
+Execute na raiz do repositório:
 
 ```bash
 python run_interactive.py
 ```
-
-O menu apresenta 4 opções:
 
 ```
 [1] Testes completos com IA  + browser visível   (recomendado)
@@ -96,45 +94,95 @@ O menu apresenta 4 opções:
 # Execução padrão (headless, com IA)
 python main.py https://seusite.com
 
-# Mostrar o browser durante a execução (recomendado para sites com anti-bot)
+# Mostrar o browser durante a execução
 python main.py https://seusite.com --headed
 
 # Só fazer scrape, sem gerar testes
 python main.py https://seusite.com --only-scrape
 
-# Gerar testes sem IA (não precisa de API key)
+# Gerar testes sem IA
 python main.py https://seusite.com --no-ai
 
 # Usar outro browser
 python main.py https://seusite.com --browser firefox
 
-# Não abrir o relatório automaticamente no browser
+# Não abrir o relatório automaticamente
 python main.py https://seusite.com --no-report
+```
+
+---
+
+## Elementos detectados
+
+O scraper usa JavaScript nativo via `page.evaluate()` para mapear todos os elementos interativos:
+
+### Por tag HTML
+`<a>`, `<button>`, `<input>`, `<select>`, `<textarea>`, `<form>`, `<details>`, `<summary>`, `<label>`
+
+### Por atributos e comportamento
+| Critério | Tipo resultante |
+|----------|----------------|
+| `role="button"` | button |
+| `role="link"` | link |
+| `role="menuitem"` | menu_item |
+| `role="tab"` | tab |
+| `role="checkbox"` / `"radio"` / `"switch"` | checkbox / radio / switch |
+| `onclick`, `ng-click`, `@click` | interactive |
+| `tabindex >= 0` | interactive |
+| `cursor: pointer` + texto visível | interactive |
+| `data-toggle`, `data-bs-toggle` | interactive |
+
+### Metadados de contexto por elemento
+
+```json
+{
+  "in_nav": true,          // dentro de <nav>, .navbar, .nav-list, etc.
+  "in_header": true,       // dentro de <header>, .site-header
+  "in_footer": true,       // dentro de <footer>, .site-footer
+  "in_menu": true,         // dentro de [role="menu"], .dropdown-menu
+  "opens_new_tab": true,   // target="_blank"
+  "has_js_event": true,    // onclick, ng-click, @click presentes
+  "is_visible": true,
+  "is_enabled": true
+}
+```
+
+---
+
+## Estratégia de locators
+
+Gerados em ordem de estabilidade:
+
+```
+1. id               → id=login-button
+2. data-testid      → [data-testid="submit"]
+3. aria-label       → [aria-label="Fechar menu"]
+4. classes CSS      → button.btn-primary
+5. name             → input[name="email"]
+6. xpath com texto  → //button[normalize-space()='Login']
+```
+
+A IA usa adicionalmente **role selectors** do Playwright:
+
+```
+role=button[name="Login"]     → funciona seja <button>, <div> ou <span>
+role=link[name="Home"]        → exact match — diferencia "Home" de "Homepage"
+role=tab[name="Detalhes"]     → detecta tabs sem <tab> nativa
 ```
 
 ---
 
 ## Relatórios gerados
 
-Cada execução cria uma pasta em `reports/` com o nome `dominio_YYYYMMDD_HHMMSS`:
-
 ```
 reports/
-└── www_saucedemo_com_20260615_183000/
+└── dominio_YYYYMMDD_HHMMSS/
     ├── elements.json     ← Todos os elementos extraídos da página
     ├── scenarios.robot   ← Arquivo de testes gerado pela IA
-    ├── report.html       ← Relatório visual (abra no browser)
-    ├── log.html          ← Log detalhado de cada passo executado
+    ├── report.html       ← Relatório visual
+    ├── log.html          ← Log detalhado de cada passo
     └── output.xml        ← Saída XML do Robot Framework
 ```
-
-### Como ler o relatório
-
-Abra `report.html` em qualquer browser. Você verá:
-
-- **Verde** — testes que passaram
-- **Vermelho** — testes que falharam, com a mensagem de erro
-- Clique em qualquer teste para expandir os passos executados
 
 ---
 
@@ -145,8 +193,8 @@ Abra `report.html` em qualquer browser. Você verá:
 | `GEMINI_API_KEY` | — | API key do Google Gemini (obrigatória para modo IA) |
 | `DEFAULT_BROWSER` | `chromium` | Browser padrão: `chromium`, `firefox` ou `webkit` |
 | `HEADLESS` | `true` | `true` = sem janela, `false` = browser visível |
-| `PAGE_TIMEOUT` | `30` | Segundos para aguardar o carregamento da página no scrape |
-| `MAX_ELEMENTS_PER_TYPE` | `40` | Máximo de elementos capturados por tipo (input, button, etc.) |
+| `PAGE_TIMEOUT` | `30` | Segundos para aguardar o carregamento da página |
+| `MAX_ELEMENTS_PER_TYPE` | `40` | Máximo de elementos capturados por tipo |
 
 ---
 
@@ -155,7 +203,6 @@ Abra `report.html` em qualquer browser. Você verá:
 ```
 webtestai/
 ├── main.py                  ← Ponto de entrada CLI
-├── run_interactive.py       ← Runner com menu interativo
 ├── requirements.txt         ← Dependências Python
 │
 ├── config/
@@ -168,9 +215,9 @@ webtestai/
 │   └── logger.py            ← Output colorido no terminal
 │
 ├── modules/
-│   ├── scraper.py           ← Módulo 1: abre o browser e extrai elementos
-│   ├── ai_generator.py      ← Módulo 2: chama a API Gemini e gera o .robot
-│   ├── executor.py          ← Módulo 3: executa o .robot com Robot Framework
+│   ├── scraper.py           ← Módulo 1: detecção via JavaScript + fallback BeautifulSoup
+│   ├── ai_generator.py      ← Módulo 2: geração de testes via Gemini REST API
+│   ├── executor.py          ← Módulo 3: execução com Robot Framework
 │   └── reporter.py          ← Módulo 4: salva arquivos e abre o relatório
 │
 └── reports/                 ← Relatórios gerados (criado automaticamente)
@@ -178,126 +225,29 @@ webtestai/
 
 ---
 
-## Tipos de elementos capturados
-
-O scraper identifica e classifica os seguintes elementos por prioridade:
-
-| Tipo | Prioridade | Exemplos |
-|------|-----------|---------|
-| Inputs de texto/email/senha/busca | Alta | Campos de login, busca, formulários |
-| Botões e submits | Alta | "Entrar", "Comprar", "Enviar" |
-| Links com href | Alta | Navegação principal, menus |
-| Selects e textareas | Alta | Dropdowns, campos de comentário |
-| Formulários | Alta | Tags `<form>` com ação |
-| H1 e H2 | Média | Títulos da página |
-| Imagens | Baixa | Tags `<img>` |
-
-Os locators são gerados em ordem de estabilidade:
-
-```
-id → data-testid → name → classes CSS → xpath com texto
-```
-
----
-
 ## Modo sem IA
-
-Se não tiver a API key do Gemini ou quiser uma execução rápida, use `--no-ai`.
-O sistema gera um template básico com os elementos capturados sem precisar de API:
 
 ```bash
 python main.py https://seusite.com --no-ai
 ```
 
-Os testes gerados verificam:
-- Carregamento da página e título correto
-- Presença dos elementos de alta prioridade
-- Clicabilidade dos links principais
-
----
-
-## Dicas por tipo de site
-
-### Sites com proteção anti-bot (Amazon, Mercado Livre, etc.)
-Use `--headed` — o browser visível reduz a detecção:
-```bash
-python main.py https://www.amazon.com.br --headed
-```
-
-### Sites de login e formulários (sistemas internos, demos)
-Funcionam muito bem em headless. A IA gera automaticamente:
-- Teste de login com credenciais válidas
-- Teste com credenciais inválidas
-- Teste com campos obrigatórios vazios
-
-### Sites institucionais e portais públicos
-Funcionam sem problemas com as configurações padrão.
+Gera um template básico verificando:
+- Carregamento da página e presença dos elementos essenciais
+- Funcionamento dos itens de navegação detectados
+- Validação de formulário com envio sem dados
 
 ---
 
 ## Solução de problemas
 
-### `UnicodeEncodeError` no terminal Windows
-O `settings.py` aplica UTF-8 automaticamente. Se ainda ocorrer, defina a variável antes de rodar:
-```bash
-set PYTHONIOENCODING=utf-8
-python main.py https://seusite.com
-```
+### `networkidle atingiu timeout`
+Normal em sites com requisições contínuas. O scraper usa `domcontentloaded` como fallback automaticamente.
 
-### `networkidle atingiu timeout` (aviso em amarelo)
-Comportamento normal em sites com requisições contínuas como e-commerces.
-O scraper usa `domcontentloaded` como fallback automaticamente. Não afeta o funcionamento.
+### Poucos elementos capturados
+Use `--only-scrape` e inspecione o `elements.json`. Se o site carrega conteúdo com atraso, aumente `PAGE_TIMEOUT` no `.env`.
 
-### Testes falhando por elemento não encontrado (timeout)
-- O site pode exigir login para mostrar os elementos
-- Use `--headed` para visualizar o que o browser está carregando
-- Use `--only-scrape` e inspecione o `elements.json` para ver quais elementos foram capturados
+### Testes falhando com "strict mode violation"
+Um seletor resolve para múltiplos elementos. Edite o `scenarios.robot` adicionando `>> nth=0` ao seletor ou use `role=link[name="texto exato"]`.
 
 ### `Suite contains no tests or tasks`
-O arquivo `.robot` foi gerado incompleto (limite de tokens). Execute novamente.
-
-### Testes com assertions erradas (texto esperado diferente do real)
-A IA pode não conhecer o texto exato das mensagens de erro do site.
-Edite o `scenarios.robot` gerado e ajuste os valores esperados, ou rode novamente.
-
----
-
-## Exemplo de execução completa
-
-```
-╭──────────────────────────────────────────────────────────────────────────────╮
-│  WebTestAI                                                                   │
-│  Automação inteligente de testes web                                         │
-╰──────────────────────────────────────────────────────────────────────────────╯
-
-[ 1 ] Abrindo browser e carregando página
-  →  URL: https://www.saucedemo.com
-  →  Browser: chromium | headless=True
-  ✓  Página carregada: Swag Labs
-
-[ 2 ] Inspecionando e classificando elementos
-  ✓  4 elementos capturados  (4 alta prioridade)
-  ●  INPUT   //*   Username
-  ●  INPUT   //*   Password
-  ●  INPUT   //*   (submit)
-  ●  FORM    //form
-
-[ 3 ] Gerando cenários de teste com IA
-  →  Modelo: gemini-2.5-flash
-  →  Elementos enviados: 4
-  ✓  Cenários salvos: scenarios.robot
-  →  Test cases gerados: ~30
-
-[ 4 ] Executando testes com Robot Framework
-  Login Com Sucesso                        | PASS |
-  Login Com Credenciais Invalidas          | PASS |
-  Login Com Usuario Vazio                  | PASS |
-  Login Com Senha Vazia                    | PASS |
-  4 tests, 4 passed, 0 failed
-
-[ 5 ] Resumo da execução
-  Página:  Swag Labs
-  URL:     https://www.saucedemo.com/
-  Relatórios em: reports/www_saucedemo_com_20260615_183000
-  Status dos testes: PASSOU ✓
-```
+Arquivo `.robot` gerado incompleto (limite de tokens). Execute novamente ou aumente `AI_MAX_TOKENS` em `config/settings.py`.
